@@ -4,13 +4,17 @@ import com.example.ffridge.data.model.Ingredient
 import com.example.ffridge.data.repository.IngredientRepository
 import com.example.ffridge.domain.model.ExpiryStatus
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.temporal.ChronoUnit
+import kotlin.math.abs
 
 class CheckExpiryUseCase(
     private val repository: IngredientRepository
 ) {
-    fun getExpiringIngredients(daysAhead: Int = 3): Flow<List<Ingredient>> {
-        return repository.getExpiringIngredients(daysAhead)
+    fun getExpiringIngredients(): Flow<List<Ingredient>> {
+        return repository.getExpiringSoonIngredients()
     }
 
     fun getExpiredIngredients(): Flow<List<Ingredient>> {
@@ -22,11 +26,13 @@ class CheckExpiryUseCase(
             return ExpiryStatus.NoExpiry
         }
 
-        val currentTime = System.currentTimeMillis()
-        val daysUntilExpiry = ((ingredient.expiryDate - currentTime) / (24 * 60 * 60 * 1000)).toInt()
+        val expiryLocalDate = Instant.ofEpochMilli(ingredient.expiryDate).atZone(ZoneId.systemDefault()).toLocalDate()
+        val currentLocalDate = LocalDate.now(ZoneId.systemDefault())
+
+        val daysUntilExpiry = ChronoUnit.DAYS.between(currentLocalDate, expiryLocalDate).toInt()
 
         return when {
-            daysUntilExpiry < 0 -> ExpiryStatus.Expired(Math.abs(daysUntilExpiry))
+            daysUntilExpiry < 0 -> ExpiryStatus.Expired(abs(daysUntilExpiry))
             daysUntilExpiry == 0 -> ExpiryStatus.ExpiringToday
             daysUntilExpiry <= 3 -> ExpiryStatus.ExpiringSoon(daysUntilExpiry)
             daysUntilExpiry <= 7 -> ExpiryStatus.ExpiringThisWeek(daysUntilExpiry)

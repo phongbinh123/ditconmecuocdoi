@@ -6,65 +6,57 @@ import java.util.concurrent.TimeUnit
 
 object DateUtils {
 
-    private val displayFormat = SimpleDateFormat(Constants.DATE_FORMAT_DISPLAY, Locale.getDefault())
-    private val storageFormat = SimpleDateFormat(Constants.DATE_FORMAT_STORAGE, Locale.getDefault())
+    // Date format constants
+    const val DATE_FORMAT_DISPLAY = "dd MMM yyyy"
+    const val DATE_FORMAT_STORAGE = "yyyy-MM-dd"
+    const val DATE_FORMAT_FULL = "dd MMMM yyyy, HH:mm"
 
     /**
-     * Format timestamp to display date string
+     * Format timestamp to display format
      */
-    fun formatDate(timestamp: Long): String {
-        return displayFormat.format(Date(timestamp))
+    fun formatDateDisplay(timestamp: Long): String {
+        val sdf = SimpleDateFormat(DATE_FORMAT_DISPLAY, Locale.getDefault())
+        return sdf.format(Date(timestamp))
     }
 
     /**
-     * Format timestamp to storage date string
+     * Format timestamp to storage format
      */
-    fun formatDateForStorage(timestamp: Long): String {
-        return storageFormat.format(Date(timestamp))
+    fun formatDateStorage(timestamp: Long): String {
+        val sdf = SimpleDateFormat(DATE_FORMAT_STORAGE, Locale.getDefault())
+        return sdf.format(Date(timestamp))
     }
 
     /**
-     * Parse storage date string to timestamp
+     * Format timestamp to full format
      */
-    fun parseStorageDate(dateString: String): Long? {
-        return try {
-            storageFormat.parse(dateString)?.time
-        } catch (e: Exception) {
-            null
-        }
+    fun formatDateFull(timestamp: Long): String {
+        val sdf = SimpleDateFormat(DATE_FORMAT_FULL, Locale.getDefault())
+        return sdf.format(Date(timestamp))
     }
 
     /**
-     * Get days between two timestamps
+     * Get days until expiry
      */
-    fun getDaysBetween(startTime: Long, endTime: Long): Int {
-        val diffMillis = endTime - startTime
-        return TimeUnit.MILLISECONDS.toDays(diffMillis).toInt()
+    fun getDaysUntilExpiry(expiryDate: Long): Long {
+        val now = System.currentTimeMillis()
+        val diff = expiryDate - now
+        return TimeUnit.MILLISECONDS.toDays(diff)
     }
 
     /**
-     * Get days until timestamp from now
+     * Check if ingredient is expired
      */
-    fun getDaysUntil(timestamp: Long): Int {
-        return getDaysBetween(System.currentTimeMillis(), timestamp)
+    fun isExpired(expiryDate: Long): Boolean {
+        return expiryDate < System.currentTimeMillis()
     }
 
     /**
-     * Check if date is today
+     * Check if ingredient is expiring soon
      */
-    fun isToday(timestamp: Long): Boolean {
-        val today = Calendar.getInstance()
-        val date = Calendar.getInstance().apply { timeInMillis = timestamp }
-
-        return today.get(Calendar.YEAR) == date.get(Calendar.YEAR) &&
-                today.get(Calendar.DAY_OF_YEAR) == date.get(Calendar.DAY_OF_YEAR)
-    }
-
-    /**
-     * Check if date is in the past
-     */
-    fun isPast(timestamp: Long): Boolean {
-        return timestamp < System.currentTimeMillis()
+    fun isExpiringSoon(expiryDate: Long, warningDays: Int = 3): Boolean {
+        val daysUntil = getDaysUntilExpiry(expiryDate)
+        return daysUntil in 0..warningDays.toLong()
     }
 
     /**
@@ -73,59 +65,85 @@ object DateUtils {
     fun getRelativeTimeString(timestamp: Long): String {
         val now = System.currentTimeMillis()
         val diff = timestamp - now
-        val days = TimeUnit.MILLISECONDS.toDays(Math.abs(diff)).toInt()
+        val absDiff = Math.abs(diff)
 
         return when {
-            diff < 0 -> {
-                when (days) {
-                    0 -> "Today"
-                    1 -> "Yesterday"
-                    else -> "$days days ago"
-                }
+            absDiff < TimeUnit.MINUTES.toMillis(1) -> "Just now"
+            absDiff < TimeUnit.HOURS.toMillis(1) -> {
+                val minutes = TimeUnit.MILLISECONDS.toMinutes(absDiff)
+                if (diff > 0) "in $minutes min" else "$minutes min ago"
             }
-            else -> {
-                when (days) {
-                    0 -> "Today"
-                    1 -> "Tomorrow"
-                    else -> "In $days days"
-                }
+            absDiff < TimeUnit.DAYS.toMillis(1) -> {
+                val hours = TimeUnit.MILLISECONDS.toHours(absDiff)
+                if (diff > 0) "in $hours hours" else "$hours hours ago"
             }
+            absDiff < TimeUnit.DAYS.toMillis(7) -> {
+                val days = TimeUnit.MILLISECONDS.toDays(absDiff)
+                if (diff > 0) "in $days days" else "$days days ago"
+            }
+            else -> formatDateDisplay(timestamp)
         }
     }
 
     /**
-     * Get start of day timestamp
+     * Get expiry status color
+     */
+    fun getExpiryStatusColor(expiryDate: Long): Long {
+        val days = getDaysUntilExpiry(expiryDate)
+        return when {
+            days < 0 -> 0xFFEF4444  // Red - Expired
+            days <= 1 -> 0xFFEF4444  // Red - Critical
+            days <= 3 -> 0xFFF59E0B  // Orange - Warning
+            else -> 0xFF10B981      // Green - Fresh
+        }
+    }
+
+    /**
+     * Get expiry status text
+     */
+    fun getExpiryStatusText(expiryDate: Long): String {
+        val days = getDaysUntilExpiry(expiryDate)
+        return when {
+            days < 0 -> "Expired ${Math.abs(days)} days ago"
+            days == 0L -> "Expires today"
+            days == 1L -> "Expires tomorrow"
+            days <= 3 -> "Expires in $days days"
+            else -> "Fresh"
+        }
+    }
+
+    /**
+     * Add days to current time
+     */
+    fun addDays(days: Int): Long {
+        val calendar = Calendar.getInstance()
+        calendar.add(Calendar.DAY_OF_YEAR, days)
+        return calendar.timeInMillis
+    }
+
+    /**
+     * Get start of day
      */
     fun getStartOfDay(timestamp: Long = System.currentTimeMillis()): Long {
-        return Calendar.getInstance().apply {
-            timeInMillis = timestamp
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }.timeInMillis
+        val calendar = Calendar.getInstance()
+        calendar.timeInMillis = timestamp
+        calendar.set(Calendar.HOUR_OF_DAY, 0)
+        calendar.set(Calendar.MINUTE, 0)
+        calendar.set(Calendar.SECOND, 0)
+        calendar.set(Calendar.MILLISECOND, 0)
+        return calendar.timeInMillis
     }
 
     /**
-     * Get end of day timestamp
+     * Get end of day
      */
     fun getEndOfDay(timestamp: Long = System.currentTimeMillis()): Long {
-        return Calendar.getInstance().apply {
-            timeInMillis = timestamp
-            set(Calendar.HOUR_OF_DAY, 23)
-            set(Calendar.MINUTE, 59)
-            set(Calendar.SECOND, 59)
-            set(Calendar.MILLISECOND, 999)
-        }.timeInMillis
-    }
-
-    /**
-     * Add days to timestamp
-     */
-    fun addDays(timestamp: Long, days: Int): Long {
-        return Calendar.getInstance().apply {
-            timeInMillis = timestamp
-            add(Calendar.DAY_OF_YEAR, days)
-        }.timeInMillis
+        val calendar = Calendar.getInstance()
+        calendar.timeInMillis = timestamp
+        calendar.set(Calendar.HOUR_OF_DAY, 23)
+        calendar.set(Calendar.MINUTE, 59)
+        calendar.set(Calendar.SECOND, 59)
+        calendar.set(Calendar.MILLISECOND, 999)
+        return calendar.timeInMillis
     }
 }

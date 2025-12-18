@@ -3,9 +3,9 @@ package com.example.ffridge.util
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.example.ffridge.data.local.database.FfridgeDatabase
 import com.example.ffridge.data.repository.IngredientRepository
-import com.example.ffridge.data.repository.RepositoryProvider
-import com.example.ffridge.data.repository.UserRepository
+import com.example.ffridge.domain.usecase.CheckExpiryUseCase
 import kotlinx.coroutines.flow.first
 
 class ExpiryCheckWorker(
@@ -13,38 +13,26 @@ class ExpiryCheckWorker(
     params: WorkerParameters
 ) : CoroutineWorker(context, params) {
 
-    private val ingredientRepository: IngredientRepository by lazy {
-        RepositoryProvider.getIngredientRepository()
-    }
-
-    private val userRepository: UserRepository by lazy {
-        RepositoryProvider.getUserRepository()
-    }
-
     override suspend fun doWork(): Result {
         return try {
-            // Check if notifications are enabled
-            val settings = userRepository.getSettings().first()
-            if (!settings.expiryNotifications) {
-                return Result.success()
-            }
+            val database = FfridgeDatabase.getDatabase(applicationContext)
+            val repository = IngredientRepository(database.ingredientDao())
+            val checkExpiryUseCase = CheckExpiryUseCase(repository)
 
-            // Get expiring ingredients
-            val expiringIngredients = ingredientRepository
-                .getExpiringIngredients(3)
-                .first()
+            // Get the list of expiring ingredients
+            val expiringIngredientsList = checkExpiryUseCase.getExpiringIngredients().first()
 
-            // Show notification if there are expiring ingredients
-            if (expiringIngredients.isNotEmpty()) {
+            // Send notification if any ingredients are expiring
+            if (expiringIngredientsList.isNotEmpty()) {
                 NotificationHelper.showExpiryNotification(
                     applicationContext,
-                    expiringIngredients
+                    expiringIngredientsList  // Pass the list of ingredients
                 )
             }
 
             Result.success()
         } catch (e: Exception) {
-            Result.retry()
+            Result.failure()
         }
     }
 }

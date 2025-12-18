@@ -115,8 +115,7 @@ fun InventoryScreen(
                                 ) {
                                     IngredientCard(
                                         ingredient = ingredient,
-                                        expiryStatus = viewModel.getExpiryStatus(ingredient),
-                                        onEdit = { onEditClick(ingredient.id) },
+                                        onClick = { /* TODO: Navigate to detail */ },
                                         onDelete = { viewModel.deleteIngredient(ingredient) }
                                     )
                                 }

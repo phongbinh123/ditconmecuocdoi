@@ -1,60 +1,48 @@
-package com.example.ffridge.ui.navigation
+package com.example.ffridge.ui.components
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.ui.graphics.vector.ImageVector
 
-sealed class NavScreen(
+sealed class BottomNavItem(
     val route: String,
     val title: String,
     val icon: ImageVector,
-    val selectedIcon: ImageVector = icon
+    val selectedIcon: ImageVector
 ) {
-    object Inventory : NavScreen(
+    object Inventory : BottomNavItem(
         route = "inventory",
         title = "Fridge",
-        icon = Icons.Default.KitchenOutlined,
-        selectedIcon = Icons.Default.Kitchen
+        icon = Icons.Outlined.Kitchen,  // Changed from KitchenOutlined
+        selectedIcon = Icons.Filled.Kitchen
     )
 
-    object Add : NavScreen(
+    object Add : BottomNavItem(
         route = "add",
         title = "Add",
-        icon = Icons.Default.AddCircleOutline,
-        selectedIcon = Icons.Default.AddCircle
+        icon = Icons.Outlined.AddCircle,
+        selectedIcon = Icons.Filled.AddCircle
     )
 
-    object Recipes : NavScreen(
+    object Recipes : BottomNavItem(
         route = "recipes",
         title = "Cook",
-        icon = Icons.Default.RestaurantMenuOutlined,
-        selectedIcon = Icons.Default.RestaurantMenu
+        icon = Icons.Outlined.Restaurant,  // Changed from RestaurantMenuOutlined
+        selectedIcon = Icons.Filled.Restaurant
     )
 
-    object Chat : NavScreen(
+    object Chat : BottomNavItem(
         route = "chat",
         title = "Chef",
-        icon = Icons.Default.ChatBubbleOutline,
-        selectedIcon = Icons.Default.ChatBubble
-    )
-
-    object Settings : NavScreen(
-        route = "settings",
-        title = "Settings",
-        icon = Icons.Default.Settings
-    )
-
-    object Auth : NavScreen(
-        route = "auth",
-        title = "Auth",
-        icon = Icons.Default.Login
+        icon = Icons.Outlined.ChatBubble,
+        selectedIcon = Icons.Filled.ChatBubble
     )
 }
 
-// Extension property for bottom nav items
 val bottomNavItems = listOf(
-    NavScreen.Inventory,
-    NavScreen.Add,
-    NavScreen.Recipes,
-    NavScreen.Chat
+    BottomNavItem.Inventory,
+    BottomNavItem.Add,
+    BottomNavItem.Recipes,
+    BottomNavItem.Chat
 )

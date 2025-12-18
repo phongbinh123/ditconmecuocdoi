@@ -18,7 +18,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ffridge.data.model.Recipe
-import com.example.ffridge.data.model.RecipeDifficulty
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -78,7 +77,7 @@ fun RecipeDetailsBottomSheet(
                 InfoCard(
                     icon = Icons.Default.TrendingUp,
                     label = "Difficulty",
-                    value = recipe.difficulty.name.lowercase().capitalize(),
+                    value = recipe.difficulty.name.lowercase().replaceFirstChar { it.uppercase() },
                     modifier = Modifier.weight(1f)
                 )
 

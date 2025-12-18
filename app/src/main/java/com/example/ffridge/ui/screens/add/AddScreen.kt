@@ -3,10 +3,8 @@ package com.example.ffridge.ui.screens.add
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -17,7 +15,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Brush
@@ -45,7 +42,6 @@ fun AddScreen(
     val uiState by viewModel.uiState.collectAsState()
     var showDatePicker by remember { mutableStateOf(false) }
     var showUnitPicker by remember { mutableStateOf(false) }
-    var showCategoryPicker by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
 
     // Success animation
@@ -453,12 +449,14 @@ private fun CategorySelector(
     Column(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        IngredientCategory.values().chunked(3).forEach { rowCategories ->
+        // Convert enum values to list and chunk
+        val categories = IngredientCategory.values().toList()
+        categories.chunked(3).forEach { rowCategories: List<IngredientCategory> ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                rowCategories.forEach { category ->
+                rowCategories.forEach { category: IngredientCategory ->
                     CategoryChip(
                         category = category,
                         isSelected = selectedCategory == category.name,
@@ -582,7 +580,7 @@ private fun UnitPickerDialog(
             Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Constants.COMMON_UNITS.forEach { unit ->
+                Constants.COMMON_UNITS.forEach { unit: String ->
                     Surface(
                         onClick = { onUnitSelected(unit) },
                         shape = RoundedCornerShape(12.dp),

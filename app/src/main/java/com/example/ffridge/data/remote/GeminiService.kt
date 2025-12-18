@@ -1,12 +1,9 @@
 package com.example.ffridge.data.remote
 
 import com.example.ffridge.BuildConfig
-import com.example.ffridge.data.model.ChatMessage
-import com.example.ffridge.data.model.MessageRole
 import com.example.ffridge.data.model.Recipe
 import com.example.ffridge.data.model.RecipeDifficulty
 import com.google.ai.client.generativeai.GenerativeModel
-import com.google.ai.client.generativeai.type.content
 import com.google.ai.client.generativeai.type.generationConfig
 import java.util.UUID
 
@@ -20,48 +17,33 @@ class GeminiService {
             topK = 40
             topP = 0.95f
             maxOutputTokens = 2048
-        },
-        systemInstruction = content {
-            text("""
-                You are a professional Sous Chef AI assistant for a smart kitchen app called "ffridge".
-                Your role is to help users with:
-                - Food storage tips and best practices
-                - Cooking times and temperatures
-                - Ingredient substitutions
-                - Recipe suggestions based on available ingredients
-                - Cooking techniques and tips
-                
-                Guidelines:
-                - Be friendly, concise, and helpful
-                - Provide accurate, food-safe information
-                - Use simple language and avoid overly technical terms
-                - When suggesting recipes, be creative but practical
-                - Always prioritize food safety
-                - Keep responses under 200 words unless specifically asked for more detail
-                
-                Format:
-                - Use clear paragraphs
-                - Use bullet points for lists
-                - Be encouraging and positive
-            """.trimIndent())
         }
+        // Note: systemInstruction is not available in this version
+        // Use it in prompts instead
     )
 
     /**
-     * Send chat message and get response
+     * Send chat message with system prompt
      */
     suspend fun sendMessage(
         message: String,
-        conversationHistory: List<ChatMessage> = emptyList()
+        conversationHistory: List<com.example.ffridge.data.model.ChatMessage> = emptyList()
     ): String {
         return try {
-            val chat = generativeModel.startChat(
-                history = conversationHistory.takeLast(5).map { msg ->
-                    content(msg.role.name.lowercase()) { text(msg.text) }
-                }
-            )
+            // Add system instruction to first message
+            val systemPrompt = """
+                You are a professional Sous Chef AI assistant for a smart kitchen app.
+                Help users with food storage, cooking times, substitutions, and recipes.
+                Be friendly, concise, and helpful. Keep responses under 200 words.
+            """.trimIndent()
 
-            val response = chat.sendMessage(message)
+            val fullMessage = if (conversationHistory.isEmpty()) {
+                "$systemPrompt\n\nUser: $message"
+            } else {
+                message
+            }
+
+            val response = generativeModel.generateContent(fullMessage)
             response.text ?: "I'm sorry, I couldn't generate a response. Please try again."
         } catch (e: Exception) {
             throw Exception("Failed to get AI response: ${e.message}")
@@ -69,44 +51,37 @@ class GeminiService {
     }
 
     /**
-     * Generate recipe from ingredients with enhanced prompt
+     * Generate recipe from ingredients
      */
     suspend fun generateRecipe(ingredients: List<String>): Recipe {
         val ingredientList = ingredients.joinToString(", ")
 
         val prompt = """
-            Create a delicious and practical recipe using PRIMARILY these ingredients: $ingredientList
-            
+            Create a delicious recipe using PRIMARILY these ingredients: $ingredientList
             You can assume basic pantry items like: salt, pepper, oil, butter, garlic, onions.
             
-            Return ONLY the recipe in this EXACT format (no extra text):
+            Return the recipe in this EXACT format:
             
-            TITLE: [Creative, appetizing recipe name]
-            DESCRIPTION: [1-2 sentence description that sounds delicious]
+            TITLE: [Creative recipe name]
+            DESCRIPTION: [1-2 sentence description]
             INGREDIENTS: [ingredient 1], [ingredient 2], [ingredient 3], etc.
             INSTRUCTIONS: [Step 1] | [Step 2] | [Step 3] | etc.
             COOKING_TIME: [total time in minutes as a number]
             DIFFICULTY: [EASY or MEDIUM or HARD]
             
-            Requirements:
-            - Make it realistic and achievable
-            - Include exact measurements in ingredients
-            - Instructions should be clear and numbered
-            - Cooking time should be accurate
-            - Choose difficulty based on technique complexity
+            Make it realistic, include exact measurements, and clear numbered instructions.
         """.trimIndent()
 
         return try {
             val response = generativeModel.generateContent(prompt)
-            val text = response.text ?: throw Exception("Empty response from AI")
-
+            val text = response.text ?: throw Exception("Empty response")
             parseRecipe(text, ingredients)
         } catch (e: Exception) {
-            // Fallback recipe if AI fails
+            // Fallback recipe
             Recipe(
                 id = UUID.randomUUID().toString(),
                 title = "Simple ${ingredients.firstOrNull() ?: "Ingredient"} Dish",
-                description = "A quick and easy recipe using your available ingredients",
+                description = "A quick recipe using your available ingredients",
                 ingredients = ingredients.map { "1 cup $it" },
                 instructions = listOf(
                     "Prepare all ingredients",
@@ -151,10 +126,7 @@ class GeminiService {
                     instructions = instructionText.split("|")
                         .map { it.trim() }
                         .filter { it.isNotBlank() }
-                        .mapIndexed { index, step ->
-                            // Remove any existing step numbers
-                            step.replaceFirst(Regex("^\\d+\\.?\\s*"), "")
-                        }
+                        .map { it.replaceFirst(Regex("^\\d+\\.?\\s*"), "") }
                 }
                 line.startsWith("COOKING_TIME:", ignoreCase = true) -> {
                     val timeText = line.substringAfter(":").trim()
@@ -171,12 +143,10 @@ class GeminiService {
             }
         }
 
-        // Fallback to input ingredients if parsing failed
         if (ingredients.isEmpty()) {
             ingredients = fallbackIngredients.map { "1 cup $it" }
         }
 
-        // Fallback instructions if parsing failed
         if (instructions.isEmpty()) {
             instructions = listOf(
                 "Prepare and clean all ingredients",
@@ -198,55 +168,5 @@ class GeminiService {
             createdAt = System.currentTimeMillis(),
             isFavorite = false
         )
-    }
-
-    /**
-     * Get quick cooking tips
-     */
-    suspend fun getCookingTip(category: String): String {
-        val prompt = "Give me one quick, practical $category tip for home cooks. Keep it under 50 words."
-
-        return try {
-            val response = generativeModel.generateContent(prompt)
-            response.text ?: "Check back later for cooking tips!"
-        } catch (e: Exception) {
-            "Unable to fetch cooking tip at the moment."
-        }
-    }
-
-    /**
-     * Get storage tips for ingredient
-     */
-    suspend fun getStorageTips(ingredientName: String): String {
-        val prompt = """
-            How should I store $ingredientName to keep it fresh? 
-            Provide 2-3 practical tips in bullet points.
-            Keep it concise and actionable.
-        """.trimIndent()
-
-        return try {
-            val response = generativeModel.generateContent(prompt)
-            response.text ?: "Store in a cool, dry place."
-        } catch (e: Exception) {
-            "Store properly to maintain freshness."
-        }
-    }
-
-    /**
-     * Get substitution suggestions
-     */
-    suspend fun getSubstitutions(ingredientName: String): String {
-        val prompt = """
-            What can I substitute for $ingredientName in cooking?
-            Provide 2-3 alternatives with brief explanations.
-            Format as bullet points.
-        """.trimIndent()
-
-        return try {
-            val response = generativeModel.generateContent(prompt)
-            response.text ?: "No substitutions available."
-        } catch (e: Exception) {
-            "Unable to suggest substitutions."
-        }
     }
 }

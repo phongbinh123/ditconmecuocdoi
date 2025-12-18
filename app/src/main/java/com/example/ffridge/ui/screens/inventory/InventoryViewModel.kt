@@ -72,7 +72,7 @@ class InventoryViewModel : ViewModel() {
 
     private fun observeExpiringIngredients() {
         viewModelScope.launch {
-            checkExpiryUseCase.getExpiringIngredients(3)
+            checkExpiryUseCase.getExpiringIngredients()
                 .collect { expiring ->
                     _uiState.update { it.copy(expiringCount = expiring.size) }
                 }

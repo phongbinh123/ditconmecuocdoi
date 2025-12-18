@@ -1,7 +1,7 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
 package com.example.ffridge.ui.screens.recipes
 
 import androidx.compose.animation.*
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,16 +18,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.ffridge.ui.components.EnhancedRecipeCard
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ffridge.data.model.Recipe
 import androidx.compose.material3.ExperimentalMaterial3Api
-import com.example.ffridge.data.model.RecipeDifficulty
-import com.example.ffridge.ui.components.RecipeCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -224,7 +222,7 @@ private fun RecipeFilterRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        items(RecipeFilter.values()) { filter ->
+        items(RecipeFilter.entries) { filter ->
             val isSelected = selectedFilter == filter
 
             FilterChip(
@@ -267,17 +265,6 @@ private fun AnimatedFloatingActionButton(
     hasIngredients: Boolean,
     onClick: () -> Unit
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "fab")
-    val scale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = if (isGenerating) 1.1f else 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "scale"
-    )
-
     ExtendedFloatingActionButton(
         onClick = onClick,
         icon = {
@@ -328,16 +315,6 @@ private fun GeneratingRecipeState() {
             modifier = Modifier.padding(32.dp)
         ) {
             // Animated cooking icon
-            val infiniteTransition = rememberInfiniteTransition(label = "cooking")
-            val rotation by infiniteTransition.animateFloat(
-                initialValue = 0f,
-                targetValue = 360f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(2000, easing = LinearEasing)
-                ),
-                label = "rotation"
-            )
-
             Box(
                 modifier = Modifier
                     .size(120.dp)
