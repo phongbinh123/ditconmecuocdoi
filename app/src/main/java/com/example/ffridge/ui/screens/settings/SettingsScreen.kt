@@ -43,50 +43,7 @@ fun SettingsScreen(
                 .padding(paddingValues)
                 .verticalScroll(rememberScrollState())
         ) {
-            // User Profile Section
-            uiState.user?.let { user ->
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    shape = MaterialTheme.shapes.large,
-                    color = MaterialTheme.colorScheme.primaryContainer
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Surface(
-                            modifier = Modifier.size(64.dp),
-                            shape = MaterialTheme.shapes.large,
-                            color = MaterialTheme.colorScheme.primary
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = user.displayName.first().uppercase(),
-                                    style = MaterialTheme.typography.headlineMedium,
-                                    color = MaterialTheme.colorScheme.onPrimary,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-
-                        Column {
-                            Text(
-                                text = user.displayName,
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = user.email,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                            )
-                        }
-                    }
-                }
-            }
+            // REMOVED: User Profile Section with the "1" display
 
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -336,7 +293,7 @@ private fun ThemeSelector(
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             ThemeOption(
                 theme = AppTheme.FROST,
@@ -352,12 +309,7 @@ private fun ThemeSelector(
                 modifier = Modifier.weight(1f)
             )
 
-            ThemeOption(
-                theme = AppTheme.SUNRISE,
-                selected = selectedTheme == AppTheme.SUNRISE,
-                onClick = { onThemeSelected(AppTheme.SUNRISE) },
-                modifier = Modifier.weight(1f)
-            )
+            // REMOVED: Sunrise theme option
         }
     }
 }
@@ -386,12 +338,12 @@ private fun ThemeOption(
         } else null
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(48.dp)
                     .fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
@@ -399,17 +351,16 @@ private fun ThemeOption(
                     text = when (theme) {
                         AppTheme.FROST -> "❄️"
                         AppTheme.MIDNIGHT -> "🌙"
-                        AppTheme.SUNRISE -> "🌅"
                     },
-                    style = MaterialTheme.typography.headlineSmall
+                    style = MaterialTheme.typography.headlineMedium
                 )
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Text(
                 text = theme.name.lowercase().capitalize(),
-                style = MaterialTheme.typography.labelMedium,
+                style = MaterialTheme.typography.labelLarge,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
             )
         }

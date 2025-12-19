@@ -65,32 +65,6 @@ private val MidnightColorScheme = darkColorScheme(
     outlineVariant = MidnightOnSurfaceVariant.copy(alpha = 0.2f)
 )
 
-private val SunriseColorScheme = lightColorScheme(
-    primary = SunrisePrimary,
-    onPrimary = SunriseOnPrimary,
-    primaryContainer = SunrisePrimaryVariant,
-    onPrimaryContainer = Color.White,
-    secondary = SunriseSecondary,
-    onSecondary = SunriseOnSecondary,
-    secondaryContainer = SunriseSecondaryVariant,
-    onSecondaryContainer = Color.White,
-    tertiary = SunriseTertiary,
-    onTertiary = Color.White,
-    tertiaryContainer = SunriseTertiary.copy(alpha = 0.2f),
-    onTertiaryContainer = SunriseTertiary,
-    error = SunriseError,
-    onError = SunriseOnError,
-    errorContainer = SunriseError.copy(alpha = 0.1f),
-    onErrorContainer = SunriseError,
-    background = SunriseBackground,
-    onBackground = SunriseOnBackground,
-    surface = SunriseSurface,
-    onSurface = SunriseOnSurface,
-    surfaceVariant = SunriseSurfaceVariant,
-    onSurfaceVariant = SunriseOnSurfaceVariant,
-    outline = SunriseOnSurfaceVariant.copy(alpha = 0.5f),
-    outlineVariant = SunriseOnSurfaceVariant.copy(alpha = 0.2f)
-)
 
 @Composable
 fun FfridgeTheme(
@@ -101,7 +75,6 @@ fun FfridgeTheme(
     val colorScheme = when (appTheme) {
         AppTheme.FROST -> FrostColorScheme
         AppTheme.MIDNIGHT -> MidnightColorScheme
-        AppTheme.SUNRISE -> SunriseColorScheme
     }
 
     val view = LocalView.current

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "641042638302",
+    "project_id": "ffridge-b28e6",
+    "storage_bucket": "ffridge-b28e6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:641042638302:android:8086f43512ec2c8f13e94f",
+        "android_client_info": {
+          "package_name": "com.example.ffridge"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBhIui8jMtX-x_oT16KitmS19tQezYjdpI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -14,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -36,33 +37,48 @@ fun InventoryScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var showNotification by remember { mutableStateOf(false) }
+    var showSortDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.expiringCount) {
-        showNotification = uiState.expiringCount > 0
-        delay(5000)
-        showNotification = false
+        if (uiState.expiringCount > 0) {
+            showNotification = true
+            delay(5000)
+            showNotification = false
+        }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Ffridge") },
+                title = {
+                    Text(
+                        text = "ffridge.",
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.Black,
+                        style = MaterialTheme.typography.displayLarge.copy(
+                            brush = Brush.linearGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primary,
+                                    MaterialTheme.colorScheme.secondary
+                                )
+                            )
+                        )
+                    )
+                },
                 actions = {
                     IconButton(onClick = onSettingsClick) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                )
             )
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = onAddClick,
-                icon = {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "Add"
-                    )
-                },
+                icon = { Icon(Icons.Default.Add, "Add") },
                 text = { Text("Add Item") },
                 containerColor = MaterialTheme.colorScheme.primaryContainer,
                 contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -85,30 +101,63 @@ fun InventoryScreen(
                     modifier = Modifier.padding(16.dp)
                 )
 
-                // Category filter chips
+                // Category filter
                 CategoryFilterRow(
                     selectedCategory = uiState.selectedCategory,
                     onCategorySelected = { viewModel.selectCategory(it) },
                     modifier = Modifier.padding(vertical = 8.dp)
                 )
 
-                // Search bar
-                EnhancedSearchBar(
-                    query = uiState.searchQuery,
-                    onQueryChange = { viewModel.searchIngredients(it) },
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
+                // Search + Sort
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    EnhancedSearchBar(
+                        query = uiState.searchQuery,
+                        onQueryChange = { viewModel.searchIngredients(it) },
+                        modifier = Modifier.weight(1f)
+                    )
 
-                // Ingredients list
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        onClick = { showSortDialog = true }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Sort,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = when (uiState.sortOption) {
+                                    SortOption.NAME_ASC -> "A-Z"
+                                    SortOption.NAME_DESC -> "Z-A"
+                                    SortOption.DATE_ADDED_ASC -> "Old"
+                                    SortOption.DATE_ADDED_DESC -> "New"
+                                    SortOption.EXPIRY_ASC -> "Soon"
+                                    SortOption.EXPIRY_DESC -> "Later"
+                                    SortOption.QUANTITY_ASC -> "Low"
+                                    SortOption.QUANTITY_DESC -> "High"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                // List
                 when {
-                    uiState.isLoading -> {
-                        LoadingState()
-                    }
-                    uiState.filteredIngredients.isEmpty() -> {
-                        EmptyState(
-                            searchQuery = uiState.searchQuery
-                        )
-                    }
+                    uiState.isLoading -> LoadingState()
+                    uiState.filteredIngredients.isEmpty() -> EmptyState(uiState.searchQuery)
                     else -> {
                         LazyColumn(
                             contentPadding = PaddingValues(16.dp),
@@ -119,20 +168,14 @@ fun InventoryScreen(
                                 items = uiState.filteredIngredients,
                                 key = { it.id }
                             ) { ingredient ->
-                                AnimatedVisibility(
-                                    visible = true,
-                                    enter = fadeIn() + slideInVertically(),
-                                    exit = fadeOut() + slideOutVertically()
-                                ) {
-                                    IngredientCard(
-                                        ingredient = ingredient,
-                                        onClick = { /* TODO: Navigate to detail */ },
-                                        onDelete = { viewModel.deleteIngredient(ingredient) }
-                                    )
-                                }
+                                IngredientCard(
+                                    ingredient = ingredient,
+                                    onClick = {  },
+                                    onDelete = { viewModel.deleteIngredient(ingredient) },
+                                    onEdit = { onEditClick(ingredient.id) }
+                                )
                             }
 
-                            // Bottom spacing
                             item {
                                 Spacer(modifier = Modifier.height(80.dp))
                             }
@@ -141,7 +184,7 @@ fun InventoryScreen(
                 }
             }
 
-            // Notification toast
+            // Notification
             AnimatedVisibility(
                 visible = showNotification,
                 enter = slideInVertically() + fadeIn(),
@@ -158,6 +201,66 @@ fun InventoryScreen(
             }
         }
     }
+
+    if (showSortDialog) {
+        SortDialog(
+            currentSort = uiState.sortOption,
+            onSortSelected = {
+                viewModel.setSortOption(it)
+                showSortDialog = false
+            },
+            onDismiss = { showSortDialog = false }
+        )
+    }
+}
+
+@Composable
+private fun SortDialog(
+    currentSort: SortOption,
+    onSortSelected: (SortOption) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.Sort, null, tint = MaterialTheme.colorScheme.primary) },
+        title = { Text("Sort By", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                SortOption.entries.forEach { option ->
+                    Surface(
+                        onClick = { onSortSelected(option) },
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (option == currentSort) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else Color.Transparent
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = option.displayName,
+                                fontWeight = if (option == currentSort) FontWeight.Bold else FontWeight.Normal
+                            )
+                            if (option == currentSort) {
+                                Icon(
+                                    Icons.Default.Check,
+                                    null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        shape = RoundedCornerShape(24.dp)
+    )
 }
 
 @Composable
@@ -171,7 +274,6 @@ private fun StatsHeader(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Total items card
         StatCard(
             count = totalCount,
             label = "Total",
@@ -180,7 +282,6 @@ private fun StatsHeader(
             modifier = Modifier.weight(1f)
         )
 
-        // Expiring soon card
         if (expiringCount > 0) {
             StatCard(
                 count = expiringCount,
@@ -191,7 +292,6 @@ private fun StatsHeader(
             )
         }
 
-        // Expired card
         if (expiredCount > 0) {
             StatCard(
                 count = expiredCount,
@@ -223,12 +323,7 @@ private fun StatCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                tint = color,
-                modifier = Modifier.size(32.dp)
-            )
+            Icon(icon, label, tint = color, modifier = Modifier.size(32.dp))
             Column {
                 Text(
                     text = count.toString(),
@@ -261,10 +356,8 @@ private fun CategoryFilterRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(categories) { category ->
-            val isSelected = selectedCategory == category
-
             FilterChip(
-                selected = isSelected,
+                selected = selectedCategory == category,
                 onClick = { onCategorySelected(category) },
                 label = {
                     Row(
@@ -272,21 +365,19 @@ private fun CategoryFilterRow(
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         if (category != "All") {
-                            val categoryEnum = IngredientCategory.valueOf(category)
                             Text(
-                                text = com.example.ffridge.util.Constants.CATEGORY_ICONS[categoryEnum.name] ?: "",
+                                text = com.example.ffridge.util.Constants.CATEGORY_ICONS[category] ?: "",
                                 fontSize = 16.sp
                             )
                         }
                         Text(
                             text = category.lowercase().replaceFirstChar { it.uppercase() },
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            fontWeight = if (selectedCategory == category) FontWeight.Bold else FontWeight.Normal
                         )
                     }
                 },
                 colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
                 )
             )
         }
@@ -303,107 +394,51 @@ private fun EnhancedSearchBar(
     OutlinedTextField(
         value = query,
         onValueChange = onQueryChange,
-        modifier = modifier.fillMaxWidth(),
-        placeholder = { Text("Search ingredients...") },
-        leadingIcon = {
-            Icon(
-                imageVector = Icons.Default.Search,
-                contentDescription = "Search"
-            )
-        },
+        modifier = modifier,
+        placeholder = { Text("Search...") },
+        leadingIcon = { Icon(Icons.Default.Search, "Search") },
         trailingIcon = {
             if (query.isNotEmpty()) {
                 IconButton(onClick = { onQueryChange("") }) {
-                    Icon(
-                        imageVector = Icons.Default.Clear,
-                        contentDescription = "Clear"
-                    )
+                    Icon(Icons.Default.Clear, "Clear")
                 }
             }
         },
         singleLine = true,
-        shape = RoundedCornerShape(16.dp),
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = MaterialTheme.colorScheme.primary,
-            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-        )
+        shape = RoundedCornerShape(16.dp)
     )
 }
 
 @Composable
 private fun LoadingState() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(48.dp),
-                strokeWidth = 4.dp
-            )
-            Text(
-                text = "Loading ingredients...",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            CircularProgressIndicator(Modifier.size(48.dp), strokeWidth = 4.dp)
+            Text("Loading...", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
 @Composable
-private fun EmptyState(
-    searchQuery: String
-) {
-    val infiniteTransition = rememberInfiniteTransition(label = "float")
-    val offsetY by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 20f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "float"
-    )
-
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
+private fun EmptyState(searchQuery: String) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier
-                .padding(32.dp)
-                .offset(y = offsetY.dp)
+            modifier = Modifier.padding(32.dp)
         ) {
-            // Animated Icon
+            Text(text = if (searchQuery.isEmpty()) "🍽️" else "🔍", fontSize = 80.sp)
             Text(
-                text = if (searchQuery.isEmpty()) "🍽️" else "🔍",
-                fontSize = 80.sp,
-                modifier = Modifier.animateContentSize()
-            )
-
-            Text(
-                text = if (searchQuery.isEmpty()) {
-                    "Your fridge is empty"
-                } else {
-                    "No items found"
-                },
+                text = if (searchQuery.isEmpty()) "Your fridge is empty" else "No items found",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center
             )
-
             Text(
-                text = if (searchQuery.isEmpty()) {
-                    "Add your first ingredient to get started"
-                } else {
-                    "Try a different search term"
-                },
-                style = MaterialTheme.typography.bodyMedium,
+                text = if (searchQuery.isEmpty()) "Add your first ingredient" else "Try different keywords",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )

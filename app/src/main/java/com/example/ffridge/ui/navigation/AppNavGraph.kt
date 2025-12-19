@@ -3,8 +3,10 @@ package com.example.ffridge.ui.navigation
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
 import com.example.ffridge.ui.components.BottomNavItem
 import com.example.ffridge.ui.screens.add.AddScreen
 import com.example.ffridge.ui.screens.auth.AuthScreen
@@ -41,12 +43,36 @@ fun AppNavGraph(
                 },
                 onSettingsClick = {
                     navController.navigate("settings")
+                },
+                onEditClick = { ingredientId ->
+                    navController.navigate("edit/$ingredientId")
                 }
             )
         }
 
         composable(BottomNavItem.Add.route) {
             AddScreen(
+                onSaveSuccess = {
+                    navController.navigate(BottomNavItem.Inventory.route) {
+                        popUpTo(BottomNavItem.Inventory.route) { inclusive = false }
+                    }
+                },
+                onCancel = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        // Edit route with ingredient ID parameter
+        composable(
+            route = "edit/{ingredientId}",
+            arguments = listOf(
+                navArgument("ingredientId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val ingredientId = backStackEntry.arguments?.getString("ingredientId")
+            AddScreen(
+                ingredientId = ingredientId,
                 onSaveSuccess = {
                     navController.navigate(BottomNavItem.Inventory.route) {
                         popUpTo(BottomNavItem.Inventory.route) { inclusive = false }

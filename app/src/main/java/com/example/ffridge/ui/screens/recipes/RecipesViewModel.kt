@@ -1,5 +1,6 @@
 package com.example.ffridge.ui.screens.recipes
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.ffridge.data.model.Ingredient
@@ -50,12 +51,16 @@ class RecipesViewModel : ViewModel() {
 
     private fun loadRecipes() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
+            _uiState.update { it.copy(isLoading = true, error = null) }
 
             getRecipesUseCase()
                 .catch { e ->
+                    Log.e("RecipesViewModel", "Error loading recipes: ${e.message}", e)
                     _uiState.update {
-                        it.copy(isLoading = false, error = e.message)
+                        it.copy(
+                            isLoading = false,
+                            error = "Failed to load recipes: ${e.message}"
+                        )
                     }
                 }
                 .collect { recipes ->
@@ -79,8 +84,21 @@ class RecipesViewModel : ViewModel() {
     private fun loadAvailableIngredients() {
         viewModelScope.launch {
             ingredientRepository.getAllIngredients()
+                .catch { e ->
+                    Log.e("RecipesViewModel", "Error loading ingredients: ${e.message}", e)
+                }
                 .collect { ingredients ->
-                    _uiState.update { it.copy(availableIngredients = ingredients) }
+                    _uiState.update { currentState ->
+                        currentState.copy(
+                            availableIngredients = ingredients,
+                            filteredRecipes = filterRecipes(
+                                currentState.recipes,
+                                currentState.selectedFilter,
+                                currentState.searchQuery,
+                                ingredients
+                            )
+                        )
+                    }
                 }
         }
     }
@@ -115,45 +133,92 @@ class RecipesViewModel : ViewModel() {
 
     fun toggleFavorite(recipeId: String) {
         viewModelScope.launch {
-            recipeRepository.toggleFavorite(recipeId)
+            try {
+                recipeRepository.toggleFavorite(recipeId)
+                Log.d("RecipesViewModel", "Toggled favorite for recipe: $recipeId")
+            } catch (e: Exception) {
+                Log.e("RecipesViewModel", "Error toggling favorite: ${e.message}", e)
+                _uiState.update {
+                    it.copy(error = "Failed to update favorite: ${e.message}")
+                }
+            }
         }
     }
 
     fun generateRecipes() {
         viewModelScope.launch {
             val ingredients = _uiState.value.availableIngredients
+
             if (ingredients.isEmpty()) {
-                _uiState.update { it.copy(error = "No ingredients available") }
+                _uiState.update {
+                    it.copy(error = "No ingredients available. Please add ingredients first.")
+                }
                 return@launch
             }
 
+            Log.d("RecipesViewModel", "Starting recipe generation with ${ingredients.size} ingredients")
             _uiState.update { it.copy(isGenerating = true, error = null) }
 
-            generateRecipesUseCase(ingredients).fold(
-                onSuccess = { recipes ->
-                    viewModelScope.launch {
+            try {
+                generateRecipesUseCase(ingredients).fold(
+                    onSuccess = { recipes ->
+                        Log.d("RecipesViewModel", "Successfully generated ${recipes.size} recipes")
+
+                        // Insert recipes into database
                         recipes.forEach { recipe ->
-                            recipeRepository.insertRecipe(recipe)
+                            try {
+                                recipeRepository.insertRecipe(recipe)
+                                Log.d("RecipesViewModel", "Inserted recipe: ${recipe.title}")
+                            } catch (e: Exception) {
+                                Log.e("RecipesViewModel", "Error inserting recipe: ${e.message}", e)
+                            }
                         }
-                        _uiState.update { it.copy(isGenerating = false) }
+
+                        _uiState.update {
+                            it.copy(
+                                isGenerating = false,
+                                error = null
+                            )
+                        }
+                    },
+                    onFailure = { error ->
+                        Log.e("RecipesViewModel", "Recipe generation failed: ${error.message}", error)
+                        _uiState.update {
+                            it.copy(
+                                isGenerating = false,
+                                error = "Failed to generate recipes: ${error.message}"
+                            )
+                        }
                     }
-                },
-                onFailure = { error ->
-                    _uiState.update {
-                        it.copy(
-                            isGenerating = false,
-                            error = error.message
-                        )
-                    }
+                )
+            } catch (e: Exception) {
+                Log.e("RecipesViewModel", "Unexpected error during recipe generation: ${e.message}", e)
+                _uiState.update {
+                    it.copy(
+                        isGenerating = false,
+                        error = "Unexpected error: ${e.message}"
+                    )
                 }
-            )
+            }
         }
     }
 
     fun deleteRecipe(recipe: Recipe) {
         viewModelScope.launch {
-            recipeRepository.deleteRecipe(recipe)
+            try {
+                recipeRepository.deleteRecipe(recipe)
+                Log.d("RecipesViewModel", "Deleted recipe: ${recipe.title}")
+            } catch (e: Exception) {
+                Log.e("RecipesViewModel", "Error deleting recipe: ${e.message}", e)
+                _uiState.update {
+                    it.copy(error = "Failed to delete recipe: ${e.message}")
+                }
+            }
         }
+    }
+
+    fun clearError() {
+        _uiState.update { it.copy(error = null) }
     }
 
     private fun filterRecipes(
@@ -171,11 +236,17 @@ class RecipesViewModel : ViewModel() {
             RecipeFilter.Quick -> filtered.filter { it.cookingTime <= 30 }
             RecipeFilter.Easy -> filtered.filter { it.difficulty == RecipeDifficulty.EASY }
             RecipeFilter.WithAvailableIngredients -> {
-                val ingredientNames = ingredients.map { it.name.lowercase() }
-                filtered.filter { recipe ->
-                    recipe.ingredients.any { recipeIngredient ->
-                        ingredientNames.any {
-                            recipeIngredient.lowercase().contains(it)
+                if (ingredients.isEmpty()) {
+                    filtered
+                } else {
+                    val ingredientNames = ingredients.map { it.name.lowercase().trim() }
+                    filtered.filter { recipe ->
+                        recipe.ingredients.any { recipeIngredient ->
+                            val recipeIngredientLower = recipeIngredient.lowercase().trim()
+                            ingredientNames.any { ingredientName ->
+                                recipeIngredientLower.contains(ingredientName) ||
+                                        ingredientName.contains(recipeIngredientLower)
+                            }
                         }
                     }
                 }
@@ -184,9 +255,13 @@ class RecipesViewModel : ViewModel() {
 
         // Apply search
         if (query.isNotBlank()) {
+            val queryLower = query.lowercase().trim()
             filtered = filtered.filter {
-                it.title.contains(query, ignoreCase = true) ||
-                        it.description.contains(query, ignoreCase = true)
+                it.title.lowercase().contains(queryLower) ||
+                        it.description.lowercase().contains(queryLower) ||
+                        it.ingredients.any { ingredient ->
+                            ingredient.lowercase().contains(queryLower)
+                        }
             }
         }
 

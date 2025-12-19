@@ -3,88 +3,76 @@ package com.example.ffridge.ui.screens.inventory
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.ffridge.data.model.Ingredient
-import com.example.ffridge.data.repository.IngredientRepository
 import com.example.ffridge.data.repository.RepositoryProvider
-import com.example.ffridge.domain.usecase.CheckExpiryUseCase
-import com.example.ffridge.domain.usecase.DeleteIngredientUseCase
-import com.example.ffridge.domain.usecase.GetIngredientsUseCase
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.util.concurrent.TimeUnit
 
 data class InventoryUiState(
     val ingredients: List<Ingredient> = emptyList(),
     val filteredIngredients: List<Ingredient> = emptyList(),
+    val isLoading: Boolean = true,
     val selectedCategory: String = "All",
     val searchQuery: String = "",
+    val sortOption: SortOption = SortOption.DATE_ADDED_DESC,
     val expiringCount: Int = 0,
-    val expiredCount: Int = 0,
-    val isLoading: Boolean = false,
-    val error: String? = null
+    val expiredCount: Int = 0
 )
 
+enum class SortOption(val displayName: String) {
+    NAME_ASC("Name (A-Z)"),
+    NAME_DESC("Name (Z-A)"),
+    DATE_ADDED_ASC("Oldest First"),
+    DATE_ADDED_DESC("Newest First"),
+    EXPIRY_ASC("Expiring Soon"),
+    EXPIRY_DESC("Expiring Last"),
+    QUANTITY_ASC("Quantity (Low to High)"),
+    QUANTITY_DESC("Quantity (High to Low)")
+}
+
 class InventoryViewModel : ViewModel() {
-
-    private val ingredientRepository: IngredientRepository =
-        RepositoryProvider.getIngredientRepository()
-
-    private val getIngredientsUseCase = GetIngredientsUseCase(ingredientRepository)
-    private val deleteIngredientUseCase = DeleteIngredientUseCase(ingredientRepository)
-    private val checkExpiryUseCase = CheckExpiryUseCase(ingredientRepository)
+    private val ingredientRepository = RepositoryProvider.getIngredientRepository()
 
     private val _uiState = MutableStateFlow(InventoryUiState())
     val uiState: StateFlow<InventoryUiState> = _uiState.asStateFlow()
 
     init {
         loadIngredients()
-        observeExpiringIngredients()
-        observeExpiredIngredients()
     }
 
     private fun loadIngredients() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-
-            getIngredientsUseCase()
-                .catch { e ->
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            error = e.message
-                        )
+            ingredientRepository.getAllIngredients().collect { ingredients ->
+                _uiState.update { currentState ->
+                    val expiringCount = ingredients.count { ingredient ->
+                        ingredient.expiryDate?.let { expiryDate ->
+                            val daysUntilExpiry = TimeUnit.MILLISECONDS.toDays(
+                                expiryDate - System.currentTimeMillis()
+                            )
+                            daysUntilExpiry in 0..3
+                        } ?: false
                     }
-                }
-                .collect { ingredients ->
-                    _uiState.update { currentState ->
-                        currentState.copy(
-                            ingredients = ingredients,
-                            filteredIngredients = filterIngredients(
-                                ingredients,
-                                currentState.selectedCategory,
-                                currentState.searchQuery
-                            ),
-                            isLoading = false,
-                            error = null
-                        )
+
+                    val expiredCount = ingredients.count { ingredient ->
+                        ingredient.expiryDate?.let { expiryDate ->
+                            expiryDate < System.currentTimeMillis()
+                        } ?: false
                     }
-                }
-        }
-    }
 
-    private fun observeExpiringIngredients() {
-        viewModelScope.launch {
-            checkExpiryUseCase.getExpiringIngredients()
-                .collect { expiring ->
-                    _uiState.update { it.copy(expiringCount = expiring.size) }
+                    currentState.copy(
+                        ingredients = ingredients,
+                        filteredIngredients = filterAndSortIngredients(
+                            ingredients,
+                            currentState.selectedCategory,
+                            currentState.searchQuery,
+                            currentState.sortOption
+                        ),
+                        isLoading = false,
+                        expiringCount = expiringCount,
+                        expiredCount = expiredCount
+                    )
                 }
-        }
-    }
-
-    private fun observeExpiredIngredients() {
-        viewModelScope.launch {
-            checkExpiryUseCase.getExpiredIngredients()
-                .collect { expired ->
-                    _uiState.update { it.copy(expiredCount = expired.size) }
-                }
+            }
         }
     }
 
@@ -92,10 +80,11 @@ class InventoryViewModel : ViewModel() {
         _uiState.update { currentState ->
             currentState.copy(
                 selectedCategory = category,
-                filteredIngredients = filterIngredients(
+                filteredIngredients = filterAndSortIngredients(
                     currentState.ingredients,
                     category,
-                    currentState.searchQuery
+                    currentState.searchQuery,
+                    currentState.sortOption
                 )
             )
         }
@@ -105,25 +94,35 @@ class InventoryViewModel : ViewModel() {
         _uiState.update { currentState ->
             currentState.copy(
                 searchQuery = query,
-                filteredIngredients = filterIngredients(
+                filteredIngredients = filterAndSortIngredients(
                     currentState.ingredients,
                     currentState.selectedCategory,
-                    query
+                    query,
+                    currentState.sortOption
                 )
             )
         }
     }
 
-    fun deleteIngredient(ingredient: Ingredient) {
-        viewModelScope.launch {
-            deleteIngredientUseCase(ingredient)
+    fun setSortOption(sortOption: SortOption) {
+        _uiState.update { currentState ->
+            currentState.copy(
+                sortOption = sortOption,
+                filteredIngredients = filterAndSortIngredients(
+                    currentState.ingredients,
+                    currentState.selectedCategory,
+                    currentState.searchQuery,
+                    sortOption
+                )
+            )
         }
     }
 
-    private fun filterIngredients(
+    private fun filterAndSortIngredients(
         ingredients: List<Ingredient>,
         category: String,
-        query: String
+        query: String,
+        sortOption: SortOption
     ): List<Ingredient> {
         var filtered = ingredients
 
@@ -133,15 +132,29 @@ class InventoryViewModel : ViewModel() {
         }
 
         // Filter by search query
-        if (query.isNotBlank()) {
+        if (query.isNotEmpty()) {
             filtered = filtered.filter {
-                it.name.contains(query, ignoreCase = true)
+                it.name.contains(query, ignoreCase = true) ||
+                        it.category.contains(query, ignoreCase = true)
             }
         }
 
-        return filtered
+        // Sort
+        return when (sortOption) {
+            SortOption.NAME_ASC -> filtered.sortedBy { it.name.lowercase() }
+            SortOption.NAME_DESC -> filtered.sortedByDescending { it.name.lowercase() }
+            SortOption.DATE_ADDED_ASC -> filtered.sortedBy { it.addedDate }
+            SortOption.DATE_ADDED_DESC -> filtered.sortedByDescending { it.addedDate }
+            SortOption.EXPIRY_ASC -> filtered.sortedBy { it.expiryDate ?: Long.MAX_VALUE }
+            SortOption.EXPIRY_DESC -> filtered.sortedByDescending { it.expiryDate ?: Long.MIN_VALUE }
+            SortOption.QUANTITY_ASC -> filtered.sortedBy { it.quantity.toDoubleOrNull() ?: 0.0 }
+            SortOption.QUANTITY_DESC -> filtered.sortedByDescending { it.quantity.toDoubleOrNull() ?: 0.0 }
+        }
     }
 
-    fun getExpiryStatus(ingredient: Ingredient) =
-        checkExpiryUseCase.checkExpiryStatus(ingredient)
+    fun deleteIngredient(ingredient: Ingredient) {
+        viewModelScope.launch {
+            ingredientRepository.deleteIngredient(ingredient)
+        }
+    }
 }

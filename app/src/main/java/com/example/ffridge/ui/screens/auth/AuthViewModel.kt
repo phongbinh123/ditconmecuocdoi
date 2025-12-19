@@ -2,27 +2,21 @@ package com.example.ffridge.ui.screens.auth
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.ffridge.data.model.User
-import com.example.ffridge.data.repository.RepositoryProvider
-import com.example.ffridge.data.repository.UserRepository
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import java.util.UUID
+import kotlinx.coroutines.delay
 
 data class AuthUiState(
     val email: String = "",
-    val displayName: String = "",
+    val password: String = "",
+    val confirmPassword: String = "",
+    val isLogin: Boolean = true,
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val isSuccess: Boolean = false
 )
 
 class AuthViewModel : ViewModel() {
-
-    private val userRepository: UserRepository =
-        RepositoryProvider.getUserRepository()
 
     private val _uiState = MutableStateFlow(AuthUiState())
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
@@ -31,45 +25,88 @@ class AuthViewModel : ViewModel() {
         _uiState.update { it.copy(email = email, error = null) }
     }
 
-    fun updateDisplayName(name: String) {
-        _uiState.update { it.copy(displayName = name, error = null) }
+    fun updatePassword(password: String) {
+        _uiState.update { it.copy(password = password, error = null) }
     }
 
-    fun login(onSuccess: (User) -> Unit) {
+    fun updateConfirmPassword(password: String) {
+        _uiState.update { it.copy(confirmPassword = password, error = null) }
+    }
+
+    fun toggleMode() {
+        _uiState.update {
+            it.copy(
+                isLogin = !it.isLogin,
+                error = null,
+                confirmPassword = ""
+            )
+        }
+    }
+
+    fun authenticate() {
+        val state = _uiState.value
+
+        // Validation
+        if (state.email.isBlank() || state.password.isBlank()) {
+            _uiState.update { it.copy(error = "Please fill all fields") }
+            return
+        }
+
+        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(state.email).matches()) {
+            _uiState.update { it.copy(error = "Invalid email address") }
+            return
+        }
+
+        if (state.password.length < 6) {
+            _uiState.update { it.copy(error = "Password must be at least 6 characters") }
+            return
+        }
+
+        if (!state.isLogin && state.password != state.confirmPassword) {
+            _uiState.update { it.copy(error = "Passwords don't match") }
+            return
+        }
+
         viewModelScope.launch {
-            val state = _uiState.value
-
-            // Simple validation
-            if (state.email.isBlank()) {
-                _uiState.update { it.copy(error = "Please enter email") }
-                return@launch
-            }
-            if (state.displayName.isBlank()) {
-                _uiState.update { it.copy(error = "Please enter your name") }
-                return@launch
-            }
-
             _uiState.update { it.copy(isLoading = true, error = null) }
 
-            try {
-                val user = User(
-                    id = UUID.randomUUID().toString(),
-                    email = state.email,
-                    displayName = state.displayName,
-                    avatarUrl = null
+            // Simulate authentication delay
+            delay(1500)
+
+            // Mock authentication - always succeed for demo
+            _uiState.update {
+                it.copy(
+                    isLoading = false,
+                    isSuccess = true,
+                    error = null
                 )
+            }
+        }
+    }
 
-                userRepository.saveUser(user)
+    fun resetPassword() {
+        val email = _uiState.value.email
 
-                _uiState.update { it.copy(isLoading = false) }
-                onSuccess(user)
-            } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        error = e.message ?: "Login failed"
-                    )
-                }
+        if (email.isBlank()) {
+            _uiState.update { it.copy(error = "Please enter your email") }
+            return
+        }
+
+        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+            _uiState.update { it.copy(error = "Invalid email address") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, error = null) }
+
+            delay(1000)
+
+            _uiState.update {
+                it.copy(
+                    isLoading = false,
+                    error = "Password reset email sent! (Demo mode)"
+                )
             }
         }
     }

@@ -1,5 +1,12 @@
 package com.example.ffridge.ui.screens.add
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -15,18 +22,25 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
 import com.example.ffridge.data.model.IngredientCategory
 import com.example.ffridge.util.Constants
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -42,10 +56,58 @@ fun AddScreen(
     val uiState by viewModel.uiState.collectAsState()
     var showDatePicker by remember { mutableStateOf(false) }
     var showUnitPicker by remember { mutableStateOf(false) }
+    var showImageSourceDialog by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
+    val context = LocalContext.current
 
     // Success animation
     var showSuccessAnimation by remember { mutableStateOf(false) }
+
+    // Camera photo URI
+    var tempPhotoUri by remember { mutableStateOf<Uri?>(null) }
+
+    // FIXED ORDER: Declare launchers first, then use them in permission launchers
+
+    // Image picker launchers - DECLARE THESE FIRST
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let { viewModel.updateImage(it) }
+    }
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success && tempPhotoUri != null) {
+            viewModel.updateImage(tempPhotoUri)
+        }
+    }
+
+    // Permission launchers - NOW THESE CAN USE THE ABOVE LAUNCHERS
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            // Create temp file for camera
+            val photoFile = createImageFile(context)
+            tempPhotoUri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                photoFile
+            )
+            tempPhotoUri?.let { uri ->
+                cameraLauncher.launch(uri)
+            }
+        }
+    }
+
+    val storagePermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            galleryLauncher.launch("image/*")
+        }
+    }
 
     LaunchedEffect(uiState.showSuccess) {
         if (uiState.showSuccess) {
@@ -146,6 +208,77 @@ fun AddScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
+                // Photo Section
+                FormSection(title = "Photo (Optional)") {
+                    Surface(
+                        onClick = { showImageSourceDialog = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        border = androidx.compose.foundation.BorderStroke(
+                            2.dp,
+                            MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                        )
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            if (uiState.imageUri != null) {
+                                AsyncImage(
+                                    model = uiState.imageUri,
+                                    contentDescription = "Ingredient photo",
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(RoundedCornerShape(16.dp)),
+                                    contentScale = ContentScale.Crop
+                                )
+                                // Clear image button
+                                IconButton(
+                                    onClick = { viewModel.updateImage(null) },
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(8.dp)
+                                        .background(
+                                            MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                                            RoundedCornerShape(8.dp)
+                                        )
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Remove photo",
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            } else {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CameraAlt,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(48.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        text = "Add Photo",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = "Tap to select from gallery or camera",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Name field with icon
                 FormSection(title = "Basic Information") {
                     OutlinedTextField(
@@ -226,6 +359,30 @@ fun AddScreen(
                             }
                         }
                     }
+                }
+
+                // Calories field
+                FormSection(title = "Nutrition") {
+                    OutlinedTextField(
+                        value = uiState.calories,
+                        onValueChange = { viewModel.updateCalories(it) },
+                        label = { Text("Calories (Optional)") },
+                        leadingIcon = {
+                            Icon(Icons.Default.LocalFireDepartment, "Calories")
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Number,
+                            imeAction = ImeAction.Next
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                        ),
+                        shape = RoundedCornerShape(16.dp),
+                        placeholder = { Text("e.g., 150") },
+                        suffix = { Text("kcal") }
+                    )
                 }
 
                 // Category selector
@@ -381,6 +538,120 @@ fun AddScreen(
         }
     }
 
+    // Image source dialog
+    if (showImageSourceDialog) {
+        AlertDialog(
+            onDismissRequest = { showImageSourceDialog = false },
+            title = {
+                Text(
+                    text = "Add Photo",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Surface(
+                        onClick = {
+                            showImageSourceDialog = false
+                            // Check permission for gallery
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                if (ContextCompat.checkSelfPermission(
+                                        context,
+                                        Manifest.permission.READ_MEDIA_IMAGES
+                                    ) == PackageManager.PERMISSION_GRANTED
+                                ) {
+                                    galleryLauncher.launch("image/*")
+                                } else {
+                                    storagePermissionLauncher.launch(Manifest.permission.READ_MEDIA_IMAGES)
+                                }
+                            } else {
+                                if (ContextCompat.checkSelfPermission(
+                                        context,
+                                        Manifest.permission.READ_EXTERNAL_STORAGE
+                                    ) == PackageManager.PERMISSION_GRANTED
+                                ) {
+                                    galleryLauncher.launch("image/*")
+                                } else {
+                                    storagePermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+                                }
+                            }
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PhotoLibrary,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "Choose from Gallery",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+                    }
+
+                    Surface(
+                        onClick = {
+                            showImageSourceDialog = false
+                            // Check camera permission
+                            if (ContextCompat.checkSelfPermission(
+                                    context,
+                                    Manifest.permission.CAMERA
+                                ) == PackageManager.PERMISSION_GRANTED
+                            ) {
+                                // Create temp file
+                                val photoFile = createImageFile(context)
+                                tempPhotoUri = FileProvider.getUriForFile(
+                                    context,
+                                    "${context.packageName}.fileprovider",
+                                    photoFile
+                                )
+                                tempPhotoUri?.let { cameraLauncher.launch(it) }
+                            } else {
+                                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                            }
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CameraAlt,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "Take Photo",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showImageSourceDialog = false }) {
+                    Text("Cancel")
+                }
+            },
+            shape = RoundedCornerShape(24.dp)
+        )
+    }
+
     // Date picker dialog
     if (showDatePicker) {
         EnhancedDatePickerDialog(
@@ -449,14 +720,13 @@ private fun CategorySelector(
     Column(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Convert enum values to list and chunk
         val categories = IngredientCategory.values().toList()
-        categories.chunked(3).forEach { rowCategories: List<IngredientCategory> ->
+        categories.chunked(3).forEach { rowCategories ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                rowCategories.forEach { category: IngredientCategory ->
+                rowCategories.forEach { category ->
                     CategoryChip(
                         category = category,
                         isSelected = selectedCategory == category.name,
@@ -464,7 +734,6 @@ private fun CategorySelector(
                         modifier = Modifier.weight(1f)
                     )
                 }
-                // Fill remaining space if less than 3 items
                 repeat(3 - rowCategories.size) {
                     Spacer(modifier = Modifier.weight(1f))
                 }
@@ -580,7 +849,7 @@ private fun UnitPickerDialog(
             Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Constants.COMMON_UNITS.forEach { unit: String ->
+                Constants.COMMON_UNITS.forEach { unit ->
                     Surface(
                         onClick = { onUnitSelected(unit) },
                         shape = RoundedCornerShape(12.dp),
@@ -618,5 +887,16 @@ private fun UnitPickerDialog(
         },
         confirmButton = {},
         shape = RoundedCornerShape(24.dp)
+    )
+}
+
+// Helper function to create temp file for camera
+private fun createImageFile(context: Context): File {
+    val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+    val storageDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_PICTURES)
+    return File.createTempFile(
+        "INGREDIENT_${timeStamp}_",
+        ".jpg",
+        storageDir
     )
 }

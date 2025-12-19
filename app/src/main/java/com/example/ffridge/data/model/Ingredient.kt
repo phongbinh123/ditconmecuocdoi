@@ -14,7 +14,8 @@ data class Ingredient(
     val expiryDate: Long? = null,
     val addedDate: Long = System.currentTimeMillis(),
     val notes: String? = null,
-    val imageUrl: String? = null
+    val imageUrl: String? = null,
+    val calories: Int? = null  // ADD THIS LINE
 ) : Parcelable
 
 enum class IngredientCategory(val displayName: String, val icon: String) {

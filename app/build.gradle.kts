@@ -3,6 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
     id("kotlin-parcelize")
+    id("com.google.gms.google-services") version "4.4.4" apply false
 }
 
 android {
@@ -68,6 +69,18 @@ dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
     implementation("androidx.activity:activity-compose:1.8.1")
+
+    // Firebase BOM - Quản lý tất cả phiên bản Firebase
+    implementation(platform("com.google.firebase:firebase-bom:32.7.0"))
+
+    // Firebase Authentication
+    implementation("com.google.firebase:firebase-auth-ktx")
+
+    // Firebase Firestore Database
+    implementation("com.google.firebase:firebase-firestore-ktx")
+
+    // Firebase Storage (nếu cần lưu ảnh)
+    implementation("com.google.firebase:firebase-storage-ktx")
 
     // Compose BOM
     val composeBom = platform("androidx.compose:compose-bom:2023.10.01")

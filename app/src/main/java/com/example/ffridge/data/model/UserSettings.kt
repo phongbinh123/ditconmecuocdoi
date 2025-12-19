@@ -8,5 +8,5 @@ data class UserSettings(
 )
 
 enum class AppTheme {
-    FROST, MIDNIGHT, SUNRISE
+    FROST, MIDNIGHT
 }

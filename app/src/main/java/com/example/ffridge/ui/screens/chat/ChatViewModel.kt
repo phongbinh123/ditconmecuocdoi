@@ -21,8 +21,7 @@ data class ChatUiState(
 
 class ChatViewModel : ViewModel() {
 
-    private val chatRepository: ChatRepository =
-        RepositoryProvider.getChatRepository()
+    private val chatRepository: ChatRepository = RepositoryProvider.getChatRepository()
     private val geminiService = GeminiService()
 
     private val _uiState = MutableStateFlow(ChatUiState())
@@ -39,7 +38,10 @@ class ChatViewModel : ViewModel() {
             chatRepository.getAllMessages()
                 .catch { e ->
                     _uiState.update {
-                        it.copy(isLoading = false, error = e.message)
+                        it.copy(
+                            isLoading = false,
+                            error = "Failed to load messages: ${e.message}"
+                        )
                     }
                 }
                 .collect { messages ->
@@ -55,47 +57,53 @@ class ChatViewModel : ViewModel() {
     }
 
     fun updateInputText(text: String) {
-        _uiState.update { it.copy(inputText = text) }
+        _uiState.update { it.copy(inputText = text, error = null) }
     }
 
     fun sendMessage() {
-        val text = _uiState.value.inputText.trim()
-        if (text.isBlank()) return
+        val messageText = _uiState.value.inputText.trim()
+        if (messageText.isBlank() || _uiState.value.isSending) return
 
         viewModelScope.launch {
-            _uiState.update {
-                it.copy(isSending = true, inputText = "", error = null)
-            }
-
-            // Save user message
-            val userMessage = ChatMessage(
-                id = UUID.randomUUID().toString(),
-                role = MessageRole.USER,
-                text = text,
-                timestamp = System.currentTimeMillis()
-            )
-            chatRepository.insertMessage(userMessage)
-
-            // Get AI response
             try {
-                val conversationHistory = chatRepository.getConversationHistory(10)
-                val response = geminiService.sendMessage(text, conversationHistory)
+                _uiState.update {
+                    it.copy(
+                        isSending = true,
+                        inputText = "",
+                        error = null
+                    )
+                }
 
-                // Save model response
-                val modelMessage = ChatMessage(
+                // Save user message
+                val userMessage = ChatMessage(
                     id = UUID.randomUUID().toString(),
-                    role = MessageRole.MODEL,
-                    text = response,
+                    text = messageText,
+                    role = MessageRole.USER,
                     timestamp = System.currentTimeMillis()
                 )
-                chatRepository.insertMessage(modelMessage)
+                chatRepository.insertMessage(userMessage)
 
-                _uiState.update { it.copy(isSending = false) }
+                // Get AI response
+                val response = geminiService.sendMessage(
+                    message = messageText
+                )
+
+                // Save AI response
+                val aiMessage = ChatMessage(
+                    id = UUID.randomUUID().toString(),
+                    text = response,
+                    role = MessageRole.MODEL,
+                    timestamp = System.currentTimeMillis()
+                )
+                chatRepository.insertMessage(aiMessage)
+
+                _uiState.update { it.copy(isSending = false, error = null) }
+
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
                         isSending = false,
-                        error = e.message ?: "Failed to get response"
+                        error = e.message ?: "Failed to send message"
                     )
                 }
             }
@@ -104,22 +112,14 @@ class ChatViewModel : ViewModel() {
 
     fun clearChat() {
         viewModelScope.launch {
-            chatRepository.deleteAllMessages()
-
-            // Re-add welcome message
-            val welcomeMessage = ChatMessage(
-                id = UUID.randomUUID().toString(),
-                role = MessageRole.MODEL,
-                text = "Hello! I'm your Sous Chef. Ask me about storage tips, cooking times, or substitutions!",
-                timestamp = System.currentTimeMillis()
-            )
-            chatRepository.insertMessage(welcomeMessage)
-        }
-    }
-
-    fun deleteMessage(message: ChatMessage) {
-        viewModelScope.launch {
-            chatRepository.deleteMessage(message)
+            try {
+                chatRepository.deleteAllMessages()
+                _uiState.update { it.copy(error = null) }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(error = "Failed to clear chat: ${e.message}")
+                }
+            }
         }
     }
 }

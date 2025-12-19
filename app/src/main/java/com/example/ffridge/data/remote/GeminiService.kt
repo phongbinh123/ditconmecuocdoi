@@ -1,17 +1,30 @@
 package com.example.ffridge.data.remote
 
+import android.util.Log
 import com.example.ffridge.BuildConfig
 import com.example.ffridge.data.model.Recipe
 import com.example.ffridge.data.model.RecipeDifficulty
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.generationConfig
 import org.json.JSONArray
+import org.json.JSONException
 import java.util.UUID
 
 class GeminiService {
 
     private val generativeModel = GenerativeModel(
-        modelName = "gemini-pro",
+        modelName = "gemini-1.5-flash",
+        apiKey = BuildConfig.GEMINI_API_KEY,
+        generationConfig = generationConfig {
+            temperature = 0.9f
+            topK = 40
+            topP = 0.95f
+            maxOutputTokens = 8192
+        }
+    )
+
+    private val chatModel = GenerativeModel(
+        modelName = "gemini-1.5-flash",
         apiKey = BuildConfig.GEMINI_API_KEY,
         generationConfig = generationConfig {
             temperature = 0.7f
@@ -22,65 +35,145 @@ class GeminiService {
     )
 
     suspend fun sendMessage(
-        message: String,
-        conversationHistory: List<com.example.ffridge.data.model.ChatMessage> = emptyList()
+        message: String
     ): String {
         return try {
             val systemPrompt = """
-                You are a professional Sous Chef AI assistant for a smart kitchen app.
-                Help users with food storage, cooking times, substitutions, and recipes.
-                Be friendly, concise, and helpful. Keep responses under 200 words.
+You are a professional Sous Chef AI assistant named Chef Bot.
+Your role: Help users with cooking questions, food storage tips, substitutions, and recipe ideas.
+
+Guidelines:
+- Be friendly, warm, and encouraging
+- Keep responses concise (under 150 words)
+- Use cooking emojis when appropriate
+- Provide practical, actionable advice
+- If you don't know something, admit it honestly
+
+User question: $message
             """.trimIndent()
 
-            val fullMessage = if (conversationHistory.isEmpty()) {
-                "$systemPrompt\n\nUser: $message"
-            } else {
-                message
-            }
+            val response = chatModel.generateContent(systemPrompt)
+            val text = response.text
 
-            val response = generativeModel.generateContent(fullMessage)
-            response.text ?: "I'm sorry, I couldn't generate a response. Please try again."
+            if (text.isNullOrBlank()) {
+                "I apologize, but I couldn't generate a proper response. Could you please rephrase your question?"
+            } else {
+                text.trim()
+            }
         } catch (e: Exception) {
-            throw Exception("Failed to get AI response: ${e.message}")
+            Log.e("GeminiService", "Chat error: ${e.message}", e)
+            throw Exception("I'm having trouble connecting right now. Please check your internet connection and try again.")
         }
     }
 
     suspend fun generateRecipes(prompt: String): List<Recipe> {
         return try {
+            Log.d("GeminiService", "Generating recipes with prompt...")
+
             val response = generativeModel.generateContent(prompt)
-            val text = response.text ?: throw Exception("Empty response")
-            parseRecipes(text)
+            val text = response.text
+
+            if (text.isNullOrBlank()) {
+                Log.e("GeminiService", "Empty response from Gemini")
+                throw Exception("Empty response from AI")
+            }
+
+            Log.d("GeminiService", "Raw response: $text")
+
+            val recipes = parseRecipes(text)
+            Log.d("GeminiService", "Parsed ${recipes.size} recipes")
+
+            recipes
         } catch (e: Exception) {
-            // Return an empty list in case of an error
-            emptyList()
+            Log.e("GeminiService", "Error generating recipes: ${e.message}", e)
+            throw Exception("Failed to generate recipes: ${e.message}")
         }
     }
 
     private fun parseRecipes(text: String): List<Recipe> {
         val recipes = mutableListOf<Recipe>()
-        // Clean the text to make it a valid JSON array
-        val jsonArrayStr = text.trim().removePrefix("```json").removeSuffix("```").trim()
+
+        var jsonText = text.trim()
+            .removePrefix("```json")
+            .removePrefix("```")
+            .removeSuffix("```")
+            .trim()
+
+        val startIndex = jsonText.indexOf('[')
+        val endIndex = jsonText.lastIndexOf(']')
+
+        if (startIndex == -1 || endIndex == -1 || startIndex >= endIndex) {
+            Log.e("GeminiService", "No valid JSON array found in response")
+            throw Exception("Invalid JSON format in response")
+        }
+
+        jsonText = jsonText.substring(startIndex, endIndex + 1)
 
         try {
-            val jsonArray = JSONArray(jsonArrayStr)
+            val jsonArray = JSONArray(jsonText)
+            Log.d("GeminiService", "Found ${jsonArray.length()} recipes in JSON")
+
             for (i in 0 until jsonArray.length()) {
-                val jsonObject = jsonArray.getJSONObject(i)
-                val recipe = Recipe(
-                    id = UUID.randomUUID().toString(),
-                    title = jsonObject.getString("title"),
-                    description = jsonObject.getString("description"),
-                    ingredients = jsonObject.getJSONArray("ingredients").let { arr -> List(arr.length()) { arr.getString(it) } },
-                    instructions = jsonObject.getJSONArray("instructions").let { arr -> List(arr.length()) { arr.getString(it) } },
-                    cookingTime = jsonObject.getInt("cookingTime"),
-                    difficulty = RecipeDifficulty.valueOf(jsonObject.getString("difficulty").uppercase()),
-                    imageUrl = jsonObject.optString("imageUrl", null),
-                    createdAt = System.currentTimeMillis(),
-                    isFavorite = false
-                )
-                recipes.add(recipe)
+                try {
+                    val jsonObject = jsonArray.getJSONObject(i)
+
+                    val title = jsonObject.optString("title", "Untitled Recipe")
+                    val description = jsonObject.optString("description", "Delicious homemade dish")
+
+                    val ingredientsArray = jsonObject.optJSONArray("ingredients")
+                    val ingredients = mutableListOf<String>()
+                    if (ingredientsArray != null) {
+                        for (j in 0 until ingredientsArray.length()) {
+                            ingredients.add(ingredientsArray.getString(j))
+                        }
+                    }
+
+                    val instructionsArray = jsonObject.optJSONArray("instructions")
+                    val instructions = mutableListOf<String>()
+                    if (instructionsArray != null) {
+                        for (j in 0 until instructionsArray.length()) {
+                            instructions.add(instructionsArray.getString(j))
+                        }
+                    }
+
+                    val cookingTime = jsonObject.optInt("cookingTime", 30)
+                    val difficultyStr = jsonObject.optString("difficulty", "MEDIUM").uppercase()
+                    val difficulty = try {
+                        RecipeDifficulty.valueOf(difficultyStr)
+                    } catch (_: IllegalArgumentException) {
+                        RecipeDifficulty.MEDIUM
+                    }
+
+                    var imageUrl = jsonObject.optString("imageUrl", "")
+                    if (imageUrl.isBlank() || !imageUrl.startsWith("http")) {
+                        val searchQuery = title.replace(" ", "+")
+                        imageUrl = "https://source.unsplash.com/800x600/?$searchQuery,food"
+                    }
+
+                    val recipe = Recipe(
+                        id = UUID.randomUUID().toString(),
+                        title = title,
+                        description = description,
+                        ingredients = ingredients,
+                        instructions = instructions,
+                        cookingTime = cookingTime,
+                        difficulty = difficulty,
+                        imageUrl = imageUrl,
+                        createdAt = System.currentTimeMillis(),
+                        isFavorite = false
+                    )
+
+                    recipes.add(recipe)
+                    Log.d("GeminiService", "Successfully parsed recipe: $title")
+
+                } catch (e: JSONException) {
+                    Log.e("GeminiService", "Error parsing recipe at index $i: ${e.message}")
+                }
             }
-        } catch (e: Exception) {
-            // Handle JSON parsing errors
+        } catch (e: JSONException) {
+            Log.e("GeminiService", "JSON parsing error: ${e.message}")
+            Log.e("GeminiService", "Problematic JSON: $jsonText")
+            throw Exception("Failed to parse recipes JSON: ${e.message}")
         }
 
         return recipes

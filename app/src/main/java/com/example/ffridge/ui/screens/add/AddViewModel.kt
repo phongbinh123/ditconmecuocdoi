@@ -1,5 +1,6 @@
 package com.example.ffridge.ui.screens.add
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.ffridge.data.model.Ingredient
@@ -22,6 +23,8 @@ data class AddUiState(
     val category: String = "OTHER",
     val expiryDate: Long? = null,
     val notes: String = "",
+    val calories: String = "",  // NEW: Added calories
+    val imageUri: Uri? = null,  // NEW: Added image URI
     val isEditMode: Boolean = false,
     val isSaving: Boolean = false,
     val error: String? = null,
@@ -49,6 +52,8 @@ class AddViewModel : ViewModel() {
                 category = ingredient.category,
                 expiryDate = ingredient.expiryDate,
                 notes = ingredient.notes ?: "",
+                calories = ingredient.calories?.toString() ?: "",  // NEW
+                imageUri = ingredient.imageUrl?.let { Uri.parse(it) },  // NEW
                 isEditMode = true
             )
         }
@@ -78,6 +83,16 @@ class AddViewModel : ViewModel() {
         _uiState.update { it.copy(notes = notes) }
     }
 
+    // NEW: Update calories
+    fun updateCalories(calories: String) {
+        _uiState.update { it.copy(calories = calories, error = null) }
+    }
+
+    // NEW: Update image
+    fun updateImage(uri: Uri?) {
+        _uiState.update { it.copy(imageUri = uri) }
+    }
+
     fun saveIngredient(onSuccess: () -> Unit) {
         viewModelScope.launch {
             val state = _uiState.value
@@ -103,7 +118,8 @@ class AddViewModel : ViewModel() {
                 expiryDate = state.expiryDate,
                 addedDate = System.currentTimeMillis(),
                 notes = state.notes.takeIf { it.isNotBlank() },
-                imageUrl = null
+                imageUrl = state.imageUri?.toString(),  // NEW: Save image URL
+                calories = state.calories.toIntOrNull()  // NEW: Save calories
             )
 
             val result = if (state.isEditMode) {
