@@ -30,6 +30,7 @@ import kotlinx.coroutines.delay
 fun InventoryScreen(
     modifier: Modifier = Modifier,
     onAddClick: () -> Unit,
+    onSettingsClick: () -> Unit,
     onEditClick: (String) -> Unit = {},
     viewModel: InventoryViewModel = viewModel()
 ) {
@@ -43,6 +44,16 @@ fun InventoryScreen(
     }
 
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Ffridge") },
+                actions = {
+                    IconButton(onClick = onSettingsClick) {
+                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                    }
+                }
+            )
+        },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = onAddClick,

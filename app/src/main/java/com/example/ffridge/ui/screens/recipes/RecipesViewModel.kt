@@ -9,7 +9,7 @@ import com.example.ffridge.data.remote.GeminiService
 import com.example.ffridge.data.repository.IngredientRepository
 import com.example.ffridge.data.repository.RecipeRepository
 import com.example.ffridge.data.repository.RepositoryProvider
-import com.example.ffridge.domain.usecase.GenerateRecipeUseCase
+import com.example.ffridge.domain.usecase.GenerateRecipesUseCase
 import com.example.ffridge.domain.usecase.GetRecipesUseCase
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -38,7 +38,7 @@ class RecipesViewModel : ViewModel() {
     private val geminiService = GeminiService()
 
     private val getRecipesUseCase = GetRecipesUseCase(recipeRepository)
-    private val generateRecipeUseCase = GenerateRecipeUseCase(geminiService)
+    private val generateRecipesUseCase = GenerateRecipesUseCase(geminiService)
 
     private val _uiState = MutableStateFlow(RecipesUiState())
     val uiState: StateFlow<RecipesUiState> = _uiState.asStateFlow()
@@ -119,7 +119,7 @@ class RecipesViewModel : ViewModel() {
         }
     }
 
-    fun generateRecipe() {
+    fun generateRecipes() {
         viewModelScope.launch {
             val ingredients = _uiState.value.availableIngredients
             if (ingredients.isEmpty()) {
@@ -129,10 +129,12 @@ class RecipesViewModel : ViewModel() {
 
             _uiState.update { it.copy(isGenerating = true, error = null) }
 
-            generateRecipeUseCase(ingredients).fold(
-                onSuccess = { recipe ->
+            generateRecipesUseCase(ingredients).fold(
+                onSuccess = { recipes ->
                     viewModelScope.launch {
-                        recipeRepository.insertRecipe(recipe)
+                        recipes.forEach { recipe ->
+                            recipeRepository.insertRecipe(recipe)
+                        }
                         _uiState.update { it.copy(isGenerating = false) }
                     }
                 },

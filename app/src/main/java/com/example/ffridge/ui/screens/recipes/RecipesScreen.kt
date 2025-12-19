@@ -5,7 +5,6 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -41,7 +40,7 @@ fun RecipesScreen(
             AnimatedFloatingActionButton(
                 isGenerating = uiState.isGenerating,
                 hasIngredients = uiState.availableIngredients.isNotEmpty(),
-                onClick = { viewModel.generateRecipe() }
+                onClick = { viewModel.generateRecipes() }
             )
         },
         modifier = modifier
@@ -59,13 +58,6 @@ fun RecipesScreen(
                     modifier = Modifier.padding(16.dp)
                 )
 
-                // Filter chips
-                RecipeFilterRow(
-                    selectedFilter = uiState.selectedFilter,
-                    onFilterSelected = { viewModel.selectFilter(it) },
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
-
                 // Content
                 when {
                     uiState.isLoading -> {
@@ -77,7 +69,7 @@ fun RecipesScreen(
                     uiState.filteredRecipes.isEmpty() -> {
                         EmptyRecipesState(
                             hasIngredients = uiState.availableIngredients.isNotEmpty(),
-                            onGenerateClick = { viewModel.generateRecipe() }
+                            onGenerateClick = { viewModel.generateRecipes() }
                         )
                     }
                     else -> {
@@ -211,53 +203,6 @@ private fun RecipesHeader(
     }
 }
 
-@Composable
-private fun RecipeFilterRow(
-    selectedFilter: RecipeFilter,
-    onFilterSelected: (RecipeFilter) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    LazyRow(
-        modifier = modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        items(RecipeFilter.entries) { filter ->
-            val isSelected = selectedFilter == filter
-
-            FilterChip(
-                selected = isSelected,
-                onClick = { onFilterSelected(filter) },
-                label = {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = when (filter) {
-                                RecipeFilter.All -> Icons.Default.GridView
-                                RecipeFilter.Favorites -> Icons.Default.Favorite
-                                RecipeFilter.Quick -> Icons.Default.Timer
-                                RecipeFilter.Easy -> Icons.Default.ThumbUp
-                                RecipeFilter.WithAvailableIngredients -> Icons.Default.CheckCircle
-                            },
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Text(
-                            text = filter.name.replace("_", " "),
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                        )
-                    }
-                },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            )
-        }
-    }
-}
 
 @Composable
 private fun AnimatedFloatingActionButton(
@@ -283,7 +228,7 @@ private fun AnimatedFloatingActionButton(
         },
         text = {
             Text(
-                text = if (isGenerating) "Generating..." else "AI Generate",
+                text = if (isGenerating) "Generating..." else "Cook",
                 fontWeight = FontWeight.Bold
             )
         },
